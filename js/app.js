@@ -225,17 +225,22 @@ function setListening(on) {
 }
 
 function toggleListening() {
-  if (rec) { try { rec.stop(); } catch { /* už skončilo */ } return; }
+  // Druhé ťuknutie: tlačidlo sa hneď vypne, chvíľu počkáme na posledné slovo.
+  if (rec) { rec.finishSoon(); return; }
   hideMsg();
   const r = new SR();
-  let heard = '', error = '', done = false, timer = null;
+  let heard = '', error = '', done = false, stopping = false, timer = null, cap = null;
   const input = $('entry-text');
 
+  // Ukončenie nesmie závisieť od udalosti „end" – iOS ju po stop() nie vždy pošle.
   const finish = () => {
     if (done) return;
     done = true;
     clearTimeout(timer);
-    rec = null;
+    clearTimeout(cap);
+    if (rec && rec.r === r) rec = null;
+    r.onresult = r.onerror = r.onend = null;
+    try { r.stop(); } catch { /* už skončilo */ }
     try { r.abort(); } catch { /* už skončilo */ }
     setListening(false);
     if (heard) return submit(heard);
@@ -247,8 +252,15 @@ function toggleListening() {
       showMsg('Nič som nepočul. Skús to znova alebo napíš výdavok do poľa.', { timeout: 6000 });
     }
   };
-  // iOS niekedy neoznačí výsledok ako konečný – ukončíme po chvíli ticha sami.
-  const arm = (ms) => { clearTimeout(timer); timer = setTimeout(() => { try { r.stop(); } catch { /* */ } setTimeout(finish, 800); }, ms); };
+  const finishSoon = () => {
+    if (stopping) return finish(); // tretie ťuknutie = hneď
+    stopping = true;
+    setListening(false);
+    clearTimeout(timer);
+    try { r.stop(); } catch { /* už skončilo */ }
+    timer = setTimeout(finish, 700);
+  };
+  const arm = (ms) => { clearTimeout(timer); timer = setTimeout(finish, ms); };
 
   r.lang = 'sk-SK';
   r.interimResults = true;
@@ -260,16 +272,21 @@ function toggleListening() {
       text += ev.results[i][0].transcript;
       if (!ev.results[i].isFinal) final = false;
     }
-    heard = text.trim();
+    text = text.trim();
+    const changed = text !== heard;
+    heard = text;
     input.value = heard;
-    if (final) finish(); else arm(1800);
+    if (final) finish();
+    // Ticho = text sa 1,5 s nezmenil. Opakované rovnaké výsledky časovač nepredlžujú.
+    else if (changed && !stopping) arm(1500);
   };
   r.onerror = (ev) => { error = ev.error || 'unknown'; };
   r.onend = finish;
 
-  rec = r;
+  rec = { r, finishSoon };
   setListening(true);
-  arm(8000);
+  arm(7000);                     // nikto nič nepovedal
+  cap = setTimeout(finish, 20000); // tvrdý strop, nech sa stane čokoľvek
   try { r.start(); } catch { error = 'start'; finish(); }
 }
 
