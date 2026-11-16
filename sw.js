@@ -1,6 +1,6 @@
 // Service worker: aplikácia funguje offline. Súbory sa berú z cache a na pozadí
 // sa obnovia zo siete, takže nová verzia sa prejaví pri ďalšom otvorení.
-const CACHE = 'rozpocet-v1';
+const CACHE = 'rozpocet-v2';
 const ASSETS = [
   './',
   'index.html',
