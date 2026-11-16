@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Denný rozpočet</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rozpočet">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<main>
+  <!-- 1. Dnes -->
+  <section id="tab-today" class="tab">
+    <div id="hero" class="hero">
+      <div id="hero-label" class="hero-label">Dnes zostáva</div>
+      <div id="hero-value" class="hero-value">–</div>
+    </div>
+    <dl class="stats">
+      <div><dt>Dnešný limit</dt><dd id="st-limit">–</dd></div>
+      <div><dt>Minuté dnes</dt><dd id="st-spent">–</dd></div>
+    </dl>
+
+    <div class="entry">
+      <button id="mic" class="mic" type="button" aria-label="Diktovať výdavok" hidden>
+        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 0 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/></svg>
+      </button>
+      <div id="mic-label" class="mic-label" hidden>Ťukni a povedz sumu a na čo</div>
+      <form id="entry-form" class="entry-form" autocomplete="off">
+        <input id="entry-text" type="text" enterkeyhint="done" autocapitalize="off" autocorrect="off"
+               placeholder="napr. 12,50 obed" aria-label="Výdavok: suma a popis">
+        <button type="submit" class="btn primary">Zapísať</button>
+      </form>
+      <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
+    </div>
+
+    <h2>Dnešné výdavky</h2>
+    <div id="today-list"></div>
+  </section>
+
+  <!-- 2. História -->
+  <section id="tab-history" class="tab" hidden>
+    <div class="period-nav">
+      <button id="per-prev" class="btn icon" type="button" aria-label="Predchádzajúce obdobie">‹</button>
+      <div id="per-label" class="period-label"></div>
+      <button id="per-next" class="btn icon" type="button" aria-label="Nasledujúce obdobie">›</button>
+    </div>
+    <div id="history-body"></div>
+  </section>
+
+  <!-- 3. Nastavenia -->
+  <section id="tab-settings" class="tab" hidden>
+    <h1>Nastavenia</h1>
+    <label class="field">
+      <span>Mesačný rozpočet na bežné výdavky (€)</span>
+      <input id="set-budget" type="text" inputmode="decimal">
+    </label>
+    <label class="field">
+      <span>Deň výplaty (1 – 31)</span>
+      <input id="set-payday" type="number" inputmode="numeric" min="1" max="31">
+    </label>
+    <p id="set-info" class="note"></p>
+
+    <h2>Záloha dát</h2>
+    <p class="note warn">Dáta sú uložené len v tomto iPhone. Safari ich môže po dlhšom nepoužívaní zmazať – priebežne si rob zálohu.</p>
+    <p id="backup-info" class="note"></p>
+    <button id="btn-backup" class="btn primary wide" type="button">Zálohovať všetko (JSON)</button>
+    <button id="btn-restore" class="btn wide" type="button">Obnoviť zo zálohy…</button>
+    <input id="restore-file" type="file" accept=".json,application/json" hidden>
+    <button id="btn-csv" class="btn wide" type="button">Export výdavkov do CSV</button>
+    <p id="set-msg" class="msg" role="status" aria-live="polite" hidden></p>
+    <p id="storage-info" class="note"></p>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Obrazovky">
+  <button type="button" data-tab="today" class="active">Dnes</button>
+  <button type="button" data-tab="history">História</button>
+  <button type="button" data-tab="settings">Nastavenia</button>
+</nav>
+
+<!-- Úprava výdavku -->
+<div id="sheet" class="sheet" hidden>
+  <form id="edit-form" class="sheet-body" autocomplete="off">
+    <h2>Upraviť výdavok</h2>
+    <label class="field"><span>Suma (€)</span><input id="ed-amount" type="text" inputmode="decimal"></label>
+    <label class="field"><span>Popis</span><input id="ed-desc" type="text" autocapitalize="off"></label>
+    <label class="field"><span>Kategória</span><select id="ed-cat"></select></label>
+    <label class="field"><span>Deň</span><input id="ed-date" type="date"></label>
+    <p id="ed-raw" class="note"></p>
+    <div class="row">
+      <button id="ed-delete" class="btn danger" type="button">Zmazať</button>
+      <span class="grow"></span>
+      <button id="ed-cancel" class="btn" type="button">Zrušiť</button>
+      <button class="btn primary" type="submit">Uložiť</button>
+    </div>
+  </form>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
