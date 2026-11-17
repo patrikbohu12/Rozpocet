@@ -74,16 +74,26 @@ export function compute({ budgetCents, payday, today, expenses }) {
     // výdavky s budúcim dátumom sa rátajú až v ten deň
   }
   const daysLeft = daysBetween(today, end);
+  const daysTotal = daysBetween(start, end);
+  const daysElapsed = daysTotal - daysLeft + 1; // vrátane dneška
   const limit = Math.round((budgetCents - spentBefore) / daysLeft);
+  // Balance: koľko sa od začiatku obdobia „natieklo" po rovnomernom dennom
+  // diele, mínus všetko minuté. Pri nulových výdavkoch rastie o denný diel.
+  const accrued = Math.round((budgetCents * daysElapsed) / daysTotal);
   return {
     start,
     end,
-    daysTotal: daysBetween(start, end),
+    daysTotal,
     daysLeft,
+    daysElapsed,
     spentBefore,
     spentToday,
+    spentTotal: spentBefore + spentToday,
     limit,
     leftToday: limit - spentToday,
     leftPeriod: budgetCents - spentBefore - spentToday,
+    baseLimit: Math.round(budgetCents / daysTotal),
+    accrued,
+    balance: accrued - spentBefore - spentToday,
   };
 }

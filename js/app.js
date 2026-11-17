@@ -8,7 +8,7 @@ const DEFAULTS = { budgetCents: 42900, payday: 15, lastBackup: null };
 
 let settings = { ...DEFAULTS };
 let expenses = [];
-let historyStart = null; // začiatok zobrazeného obdobia; null = aktuálne
+let overviewStart = null; // začiatok zobrazeného obdobia; null = aktuálne
 let editingId = null;
 let msgTimer = null;
 
@@ -18,6 +18,7 @@ const money = new Intl.NumberFormat('sk-SK', { style: 'currency', currency: 'EUR
 const fmt = (cents) => money.format(cents / 100);
 const fmtPlain = (cents) => (cents / 100).toFixed(2).replace('.', ',');
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const days = (n) => `${n} ${n === 1 ? 'deň' : n >= 2 && n <= 4 ? 'dni' : 'dní'}`;
 const localDate = (key) => { const { y, m, d } = parseKey(key); return new Date(y, m - 1, d); };
 const fmtDay = (key, opts) => new Intl.DateTimeFormat('sk-SK', opts).format(localDate(key));
 const fmtTime = (iso) => new Intl.DateTimeFormat('sk-SK', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
@@ -53,23 +54,40 @@ function renderToday() {
     : '<p class="empty">Dnes zatiaľ nič.</p>';
 }
 
-function renderHistory() {
-  const current = periodFor(todayKey(), settings.payday);
-  const per = historyStart ? periodFor(historyStart, settings.payday) : current;
+function renderOverview() {
+  const today = todayKey();
+  const current = periodFor(today, settings.payday);
+  const per = overviewStart ? periodFor(overviewStart, settings.payday) : current;
+  const isCurrent = per.start === current.start;
   const all = withDay();
   const inPer = all.filter((e) => e.day >= per.start && e.day < per.end);
 
   const o = { day: 'numeric', month: 'numeric' };
   $('per-label').textContent = `${fmtDay(per.start, o)} – ${fmtDay(addDays(per.end, -1), { ...o, year: 'numeric' })}`;
-  $('per-next').disabled = per.start >= current.start;
+  $('per-next').disabled = isCurrent;
   $('per-prev').disabled = !all.some((e) => e.day < per.start);
 
   const total = inPer.reduce((s, e) => s + e.cents, 0);
-  const left = settings.budgetCents - total;
-  let html = `<div class="summary">
-    <div class="big">${fmt(total)} <span class="note">z ${fmt(settings.budgetCents)}</span></div>
-    <div class="${left < 0 ? 'neg' : ''}">${left < 0 ? `Prekročené o ${fmt(-left)}` : `Zostáva ${fmt(left)}`}</div>
-  </div>`;
+  let html = '';
+
+  if (isCurrent) {
+    const r = compute({ budgetCents: settings.budgetCents, payday: settings.payday, today, expenses: all });
+    html += `<div class="summary">
+      <div class="note">Balance – môžeš minúť</div>
+      <div class="huge ${r.balance < 0 ? 'neg' : 'pos'}">${fmt(r.balance)}</div>
+      <div class="note">Denný diel ${fmt(r.baseLimit)} × ${days(r.daysElapsed)} = ${fmt(r.accrued)}, minuté ${fmt(r.spentTotal)}.</div>
+      <div class="line"><span>Do výplaty zostáva</span><strong class="${r.leftPeriod < 0 ? 'neg' : ''}">${fmt(r.leftPeriod)}</strong></div>
+      <div class="line"><span>Do konca obdobia</span><strong>${days(r.daysLeft)}</strong></div>
+      <div class="line"><span>Minuté z rozpočtu</span><strong>${fmt(total)} z ${fmt(settings.budgetCents)}</strong></div>
+    </div>`;
+  } else {
+    const left = settings.budgetCents - total;
+    html += `<div class="summary">
+      <div class="note">Obdobie je uzavreté</div>
+      <div class="huge ${left < 0 ? 'neg' : 'pos'}">${fmt(Math.abs(left))}</div>
+      <div class="note">${left < 0 ? 'Prekročené' : 'Zostalo'} z rozpočtu ${fmt(settings.budgetCents)}. Minuté ${fmt(total)}.</div>
+    </div>`;
+  }
 
   if (!inPer.length) {
     html += '<p class="empty">V tomto období nie sú žiadne výdavky.</p>';
@@ -89,7 +107,7 @@ function renderHistory() {
       html += items.map((e) => itemHtml(e, true)).join('');
     }
   }
-  $('history-body').innerHTML = html;
+  $('overview-body').innerHTML = html;
 }
 
 async function renderSettings() {
@@ -109,14 +127,14 @@ async function renderSettings() {
 
 function render() {
   renderToday();
-  if (!$('tab-history').hidden) renderHistory();
+  if (!$('tab-overview').hidden) renderOverview();
   if (!$('tab-settings').hidden) renderSettings();
 }
 
 function showTab(name) {
-  for (const t of ['today', 'history', 'settings']) $(`tab-${t}`).hidden = t !== name;
+  for (const t of ['today', 'overview', 'settings']) $(`tab-${t}`).hidden = t !== name;
   for (const b of document.querySelectorAll('.tabs button')) b.classList.toggle('active', b.dataset.tab === name);
-  if (name === 'history') historyStart = null;
+  if (name === 'overview') overviewStart = null;
   render();
   window.scrollTo(0, 0);
 }
@@ -213,83 +231,6 @@ async function saveEdit() {
   await db.putExpense(e);
 }
 
-// ---------- hlas ----------
-
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null;
-
-function setListening(on) {
-  $('mic').classList.toggle('listening', on);
-  $('mic').setAttribute('aria-label', on ? 'Zastaviť diktovanie' : 'Diktovať výdavok');
-  $('mic-label').textContent = on ? 'Počúvam… (ťukni pre ukončenie)' : 'Ťukni a povedz sumu a na čo';
-}
-
-function toggleListening() {
-  // Druhé ťuknutie: tlačidlo sa hneď vypne, chvíľu počkáme na posledné slovo.
-  if (rec) { rec.finishSoon(); return; }
-  hideMsg();
-  const r = new SR();
-  let heard = '', error = '', done = false, stopping = false, timer = null, cap = null;
-  const input = $('entry-text');
-
-  // Ukončenie nesmie závisieť od udalosti „end" – iOS ju po stop() nie vždy pošle.
-  const finish = () => {
-    if (done) return;
-    done = true;
-    clearTimeout(timer);
-    clearTimeout(cap);
-    if (rec && rec.r === r) rec = null;
-    r.onresult = r.onerror = r.onend = null;
-    try { r.stop(); } catch { /* už skončilo */ }
-    try { r.abort(); } catch { /* už skončilo */ }
-    setListening(false);
-    if (heard) return submit(heard);
-    if (error === 'not-allowed' || error === 'service-not-allowed' || error === 'audio-capture' || error === 'language-not-supported' || error === 'start') {
-      showMsg('Diktovanie cez toto tlačidlo tu nie je dostupné alebo povolené (Nastavenia iPhonu → Safari → Mikrofón, a zapnutá Siri a diktovanie). Ťukni do poľa a použi mikrofón na klávesnici.', { error: true });
-    } else if (error === 'network') {
-      showMsg('Rozpoznávanie reči potrebuje internet. Napíš výdavok do poľa.', { error: true });
-    } else {
-      showMsg('Nič som nepočul. Skús to znova alebo napíš výdavok do poľa.', { timeout: 6000 });
-    }
-  };
-  const finishSoon = () => {
-    if (stopping) return finish(); // tretie ťuknutie = hneď
-    stopping = true;
-    setListening(false);
-    clearTimeout(timer);
-    try { r.stop(); } catch { /* už skončilo */ }
-    timer = setTimeout(finish, 700);
-  };
-  const arm = (ms) => { clearTimeout(timer); timer = setTimeout(finish, ms); };
-
-  r.lang = 'sk-SK';
-  r.interimResults = true;
-  r.continuous = false;
-  r.maxAlternatives = 1;
-  r.onresult = (ev) => {
-    let text = '', final = ev.results.length > 0;
-    for (let i = 0; i < ev.results.length; i++) {
-      text += ev.results[i][0].transcript;
-      if (!ev.results[i].isFinal) final = false;
-    }
-    text = text.trim();
-    const changed = text !== heard;
-    heard = text;
-    input.value = heard;
-    if (final) finish();
-    // Ticho = text sa 1,5 s nezmenil. Opakované rovnaké výsledky časovač nepredlžujú.
-    else if (changed && !stopping) arm(1500);
-  };
-  r.onerror = (ev) => { error = ev.error || 'unknown'; };
-  r.onend = finish;
-
-  rec = { r, finishSoon };
-  setListening(true);
-  arm(7000);                     // nikto nič nepovedal
-  cap = setTimeout(finish, 20000); // tvrdý strop, nech sa stane čokoľvek
-  try { r.start(); } catch { error = 'start'; finish(); }
-}
-
 // ---------- export, záloha ----------
 
 async function saveFile(name, text, type) {
@@ -373,13 +314,6 @@ function wire() {
   for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => showTab(b.dataset.tab));
 
   $('entry-form').addEventListener('submit', (ev) => { ev.preventDefault(); submit($('entry-text').value); });
-  if (SR) {
-    $('mic').hidden = false;
-    $('mic-label').hidden = false;
-    $('mic').addEventListener('click', toggleListening);
-  } else {
-    $('entry-text').placeholder = 'ťukni a diktuj alebo píš: 12,50 obed';
-  }
 
   $('msg').addEventListener('click', (ev) => {
     const undo = ev.target.closest('[data-undo]');
@@ -387,7 +321,7 @@ function wire() {
     if (undo) { removeExpense(undo.dataset.undo); showMsg('Zápis vrátený späť.', { timeout: 4000 }); }
     if (fix) openEdit(fix.dataset.fix);
   });
-  for (const id of ['today-list', 'history-body']) {
+  for (const id of ['today-list', 'overview-body']) {
     $(id).addEventListener('click', (ev) => { const it = ev.target.closest('.item'); if (it) openEdit(it.dataset.id); });
   }
 
@@ -397,14 +331,14 @@ function wire() {
   $('sheet').addEventListener('click', (ev) => { if (ev.target === $('sheet')) closeEdit(); });
 
   $('per-prev').addEventListener('click', () => {
-    const per = periodFor(historyStart || todayKey(), settings.payday);
-    historyStart = periodFor(addDays(per.start, -1), settings.payday).start;
-    renderHistory();
+    const per = periodFor(overviewStart || todayKey(), settings.payday);
+    overviewStart = periodFor(addDays(per.start, -1), settings.payday).start;
+    renderOverview();
   });
   $('per-next').addEventListener('click', () => {
-    const per = periodFor(historyStart || todayKey(), settings.payday);
-    historyStart = per.end;
-    renderHistory();
+    const per = periodFor(overviewStart || todayKey(), settings.payday);
+    overviewStart = per.end;
+    renderOverview();
   });
 
   $('set-budget').addEventListener('change', async () => {

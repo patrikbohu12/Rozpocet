@@ -110,3 +110,33 @@ test('dni sa počítajú v miestnom čase (Europe/Bratislava), nie v UTC', () =>
   assert.equal(isoLocal(new Date(2026, 10, 16, 0, 30, 5)), '2026-11-16T00:30:05+01:00');
   assert.equal(isoLocal(new Date(2026, 6, 1, 12, 0, 0)), '2026-07-01T12:00:00+02:00');
 });
+
+test('balance: nasporený dnešný zostatok z celého obdobia', () => {
+  // rozpočet 450 € na 30 dní = 15 € na deň
+  const b = 45000;
+  assert.equal(calc('2026-11-15', [], 15, b).balance, 1500); // prvý deň
+  assert.equal(calc('2026-11-16', [], 15, b).balance, 3000);
+  assert.equal(calc('2026-11-17', [], 15, b).balance, 4500);
+  // tri dni bez výdavku, štvrtý deň je balance 60 €
+  assert.equal(calc('2026-11-18', [], 15, b).balance, 6000);
+  assert.equal(calc('2026-11-18', [], 15, b).baseLimit, 1500);
+  // minuté sa od balance odpočítajú
+  const r = calc('2026-11-18', [{ day: '2026-11-16', cents: 2000 }, { day: '2026-11-18', cents: 500 }], 15, b);
+  assert.equal(r.balance, 6000 - 2500);
+  assert.equal(r.spentTotal, 2500);
+  // prečerpanie dá záporný balance
+  assert.equal(calc('2026-11-16', [{ day: '2026-11-15', cents: 5000 }], 15, b).balance, -2000);
+  // posledný deň obdobia: balance = celý zostatok rozpočtu
+  const last = calc('2026-12-14', [{ day: '2026-11-20', cents: 10000 }], 15, b);
+  assert.equal(last.daysElapsed, 30);
+  assert.equal(last.accrued, b);
+  assert.equal(last.balance, last.leftPeriod);
+});
+
+test('daysElapsed a balance pri predvolenom rozpočte 429 €', () => {
+  assert.equal(calc('2026-11-15').daysElapsed, 1);
+  assert.equal(calc('2026-11-15').balance, 1430);
+  assert.equal(calc('2026-11-16').daysElapsed, 2);
+  assert.equal(calc('2026-11-16').balance, 2860);
+  assert.equal(calc('2026-11-16', [{ day: '2026-11-15', cents: 2000 }]).balance, 860);
+});

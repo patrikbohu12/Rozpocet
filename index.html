@@ -31,15 +31,12 @@
     </dl>
 
     <div class="entry">
-      <button id="mic" class="mic" type="button" aria-label="Diktovať výdavok" hidden>
-        <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 0 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6-3.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H8.5a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2H13v-2.59a6 6 0 0 0 5-5.91Z"/></svg>
-      </button>
-      <div id="mic-label" class="mic-label" hidden>Ťukni a povedz sumu a na čo</div>
       <form id="entry-form" class="entry-form" autocomplete="off">
         <input id="entry-text" type="text" enterkeyhint="done" autocapitalize="off" autocorrect="off"
-               placeholder="napr. 12,50 obed" aria-label="Výdavok: suma a popis">
+               placeholder="12,50 obed" aria-label="Výdavok: suma a popis">
         <button type="submit" class="btn primary">Zapísať</button>
       </form>
+      <p class="hint">Ťukni do poľa a nadiktuj výdavok mikrofónom na klávesnici, alebo ho napíš.</p>
       <div id="msg" class="msg" role="status" aria-live="polite" hidden></div>
     </div>
 
@@ -47,14 +44,14 @@
     <div id="today-list"></div>
   </section>
 
-  <!-- 2. História -->
-  <section id="tab-history" class="tab" hidden>
+  <!-- 2. Prehľad -->
+  <section id="tab-overview" class="tab" hidden>
     <div class="period-nav">
       <button id="per-prev" class="btn icon" type="button" aria-label="Predchádzajúce obdobie">‹</button>
       <div id="per-label" class="period-label"></div>
       <button id="per-next" class="btn icon" type="button" aria-label="Nasledujúce obdobie">›</button>
     </div>
-    <div id="history-body"></div>
+    <div id="overview-body"></div>
   </section>
 
   <!-- 3. Nastavenia -->
@@ -84,7 +81,7 @@
 
 <nav class="tabs" aria-label="Obrazovky">
   <button type="button" data-tab="today" class="active">Dnes</button>
-  <button type="button" data-tab="history">História</button>
+  <button type="button" data-tab="overview">Prehľad</button>
   <button type="button" data-tab="settings">Nastavenia</button>
 </nav>
 
